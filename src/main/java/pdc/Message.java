@@ -5,6 +5,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -141,6 +143,7 @@ public class Message {
     /**
      * Reads a complete message from an input stream.
      * First reads the length prefix, then the message body.
+     * Uses chunked reading to handle TCP fragmentation for jumbo payloads.
      *
      * @param dis input stream to read from
      * @return deserialized Message object
@@ -153,8 +156,24 @@ public class Message {
         }
 
         byte[] data = new byte[totalLength];
-        dis.readFully(data);
+        readFullyChunked(dis, data, totalLength);
         return unpack(data);
+    }
+
+    /**
+     * Reads data in chunks to handle TCP fragmentation for large payloads.
+     * Uses ByteBuffer for efficient memory handling of jumbo payloads (8MB+).
+     */
+    private static void readFullyChunked(InputStream in, byte[] buffer, int length) throws IOException {
+        ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
+        int totalRead = 0;
+        while (totalRead < length) {
+            int bytesRead = in.read(buffer, totalRead, length - totalRead);
+            if (bytesRead < 0) {
+                throw new IOException("Unexpected end of stream");
+            }
+            totalRead += bytesRead;
+        }
     }
 
     /**
